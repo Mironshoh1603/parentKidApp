@@ -7,6 +7,9 @@ import 'package:latlong2/latlong.dart';
 import '../../models/child_model.dart';
 import '../../models/location_point.dart';
 import '../../providers.dart';
+import '../history/history_screen.dart';
+import '../photos/photos_screen.dart';
+import '../usage/usage_screen.dart';
 
 /// Bolaning jonli joylashuvini OpenStreetMap xaritasida ko'rsatadi.
 class ChildMapScreen extends ConsumerStatefulWidget {
@@ -21,6 +24,70 @@ class _ChildMapScreenState extends ConsumerState<ChildMapScreen> {
   final _map = MapController();
   bool _followed = false;
 
+  void _snack(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _toggleLock(bool locked) async {
+    final cmd = ref.read(commandServiceProvider);
+    if (locked) {
+      await cmd.unlock(widget.child.id);
+      _snack('Qulfni ochish buyrug\'i yuborildi');
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Qurilma qulflansinmi?'),
+        content: const Text(
+            'Bolaning telefonida oshkora qulf ekrani ko\'rsatiladi. '
+            'SOS baribir ishlaydi.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Bekor')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Qulflash')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await cmd.lock(widget.child.id);
+    _snack('Qulflash buyrug\'i yuborildi');
+  }
+
+  void _push(Widget screen) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  }
+
+  Future<void> _menu(String v) async {
+    final cmd = ref.read(commandServiceProvider);
+    switch (v) {
+      case 'usage':
+        _push(UsageScreen(
+            childId: widget.child.id, childName: widget.child.name));
+        break;
+      case 'history':
+        _push(HistoryScreen(
+            childId: widget.child.id, childName: widget.child.name));
+        break;
+      case 'photos':
+        _push(PhotosScreen(
+            childId: widget.child.id, childName: widget.child.name));
+        break;
+      case 'request_photo':
+        await cmd.requestPhoto(widget.child.id);
+        _snack('Rasm so\'rovi yuborildi. Bola ko\'rib yuboradi.');
+        break;
+      case 'request_location':
+        await cmd.requestLocation(widget.child.id);
+        _snack('Joylashuvni yangilash so\'rovi yuborildi');
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final live = ref.watch(liveLocationProvider(widget.child.id));
@@ -33,7 +100,7 @@ class _ChildMapScreenState extends ConsumerState<ChildMapScreen> {
         actions: [
           if (doc != null)
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: 4),
               child: Row(
                 children: [
                   Icon(
@@ -48,6 +115,58 @@ class _ChildMapScreenState extends ConsumerState<ChildMapScreen> {
                 ],
               ),
             ),
+          if (doc != null)
+            IconButton(
+              tooltip: doc.locked ? 'Qulfni ochish' : 'Qulflash',
+              icon: Icon(doc.locked ? Icons.lock : Icons.lock_open,
+                  color: doc.locked ? Colors.red : null),
+              onPressed: () => _toggleLock(doc.locked),
+            ),
+          PopupMenuButton<String>(
+            onSelected: _menu,
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'usage',
+                child: ListTile(
+                  leading: Icon(Icons.timelapse),
+                  title: Text('Ekran vaqti'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'history',
+                child: ListTile(
+                  leading: Icon(Icons.route),
+                  title: Text('Marshrut tarixi'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'photos',
+                child: ListTile(
+                  leading: Icon(Icons.photo_library),
+                  title: Text('Rasmlar'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'request_photo',
+                child: ListTile(
+                  leading: Icon(Icons.add_a_photo),
+                  title: Text('Rasm so\'rash'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'request_location',
+                child: ListTile(
+                  leading: Icon(Icons.my_location),
+                  title: Text('Joylashuvni yangilash'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: live.when(

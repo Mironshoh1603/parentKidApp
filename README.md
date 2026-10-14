@@ -22,6 +22,17 @@ funksiyalar yo'q).
 
 To'liq arxitektura va reja: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
+## Holat
+
+Bosqich 1–6 kodi yozilgan (ikkala ilova `flutter analyze` toza, debug APK quriladi):
+
+1. Juftlash + jonli joylashuv + OSM xarita
+2. Geo-zona + ogohlantirishlar
+3. SOS + onlayn/batareya holati
+4. Ekran vaqti + kunlik limit + masofadan qulflash
+5. Oshkora check-in rasm (Cloudinary)
+6. Marshrut tarixi (xaritada)
+
 ## Boshlash
 
 Har bir ilova papkasida:
@@ -31,3 +42,17 @@ flutter pub get
 flutterfire configure   # Firebase'ga ulash (firebase login kerak)
 flutter run
 ```
+
+### Sozlash kerak (ishga tushirishdan oldin)
+
+1. **Firebase** — `firebase login`, so'ng Console'da loyiha + Auth(Email/Password) +
+   Firestore + Realtime Database yarating. `flutterfire configure` ni har ikkala ilovada
+   ishga tushiring, qoidalarni joylang: `firebase deploy --only firestore:rules,database`.
+2. **Cloudinary** (Bosqich 5 rasm uchun) — `childApp/lib/src/core/cloudinary_config.dart`
+   ichida `cloudName` va `unsignedPreset` ni to'ldiring (imzosiz upload preset).
+
+### Bola telefonida ruxsatlar (oshkora)
+
+- **Joylashuv** — "Doim ruxsat etilsin".
+- **Ekran vaqti** (Usage access) — ilova ichidagi tugma Sozlamalarni ochadi.
+- **Ustidan ko'rsatish** (Display over other apps) — qulflash qoplamasi uchun.

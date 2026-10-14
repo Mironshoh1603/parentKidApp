@@ -13,6 +13,7 @@ class ChildModel {
   final bool isCharging;
   final bool isOnline;
   final bool soundOn;
+  final bool locked; // ota-ona qurilmani qulflaganmi (Bosqich 4)
 
   const ChildModel({
     required this.id,
@@ -26,6 +27,7 @@ class ChildModel {
     this.isCharging = false,
     this.isOnline = false,
     this.soundOn = true,
+    this.locked = false,
   });
 
   factory ChildModel.fromMap(String id, Map<String, dynamic> m) {
@@ -41,6 +43,7 @@ class ChildModel {
       isCharging: (m['isCharging'] ?? false) as bool,
       isOnline: (m['isOnline'] ?? false) as bool,
       soundOn: (m['soundOn'] ?? true) as bool,
+      locked: (m['locked'] ?? false) as bool,
     );
   }
 
@@ -55,5 +58,6 @@ class ChildModel {
         'isCharging': isCharging,
         'isOnline': isOnline,
         'soundOn': soundOn,
+        'locked': locked,
       };
 }

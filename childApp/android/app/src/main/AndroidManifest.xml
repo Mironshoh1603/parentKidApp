@@ -14,6 +14,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Bosqich 4 — ekran vaqti + qulflash (oshkora) -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
 
     <application
         android:label="Himoya"
@@ -46,6 +51,16 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
             tools:node="merge" />
+
+        <!-- flutter_overlay_window — qulflash qoplamasi xizmati -->
+        <service
+            android:name="flutter.overlay.window.flutter_overlay_window.OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Parental screen-time lock shown to the child with a visible on-screen message"/>
+        </service>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

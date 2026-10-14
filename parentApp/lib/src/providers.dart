@@ -2,16 +2,25 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import 'models/alert_model.dart';
 import 'models/child_model.dart';
 import 'models/geofence_model.dart';
+import 'models/limit_model.dart';
 import 'models/location_point.dart';
+import 'models/photo_model.dart';
+import 'models/usage_model.dart';
 import 'services/alert_service.dart';
 import 'services/auth_service.dart';
+import 'services/command_service.dart';
 import 'services/family_service.dart';
 import 'services/geofence_service.dart';
+import 'services/history_service.dart';
+import 'services/limit_service.dart';
 import 'services/live_location_service.dart';
+import 'services/photo_service.dart';
+import 'services/usage_service.dart';
 
 final authServiceProvider =
     Provider<AuthService>((ref) => AuthService(FirebaseAuth.instance));
@@ -64,3 +73,55 @@ final alertsProvider = StreamProvider.autoDispose<List<AlertModel>>(
 
 final unreadAlertsProvider = StreamProvider.autoDispose<int>(
     (ref) => ref.watch(alertServiceProvider).unreadCount());
+
+// ───── Bosqich 4 — ekran vaqti + limit + komanda ─────
+final usageServiceProvider = Provider<UsageService>((ref) {
+  final fam = ref.watch(familyServiceProvider);
+  return UsageService(FirebaseFirestore.instance, fam.familyId);
+});
+
+/// Bugungi ekran vaqti (childId bo'yicha).
+final todayUsageProvider =
+    StreamProvider.autoDispose.family<UsageModel?, String>((ref, childId) {
+  final dateKey = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  return ref.watch(usageServiceProvider).watchDay(childId, dateKey);
+});
+
+final limitServiceProvider = Provider<LimitService>((ref) {
+  final fam = ref.watch(familyServiceProvider);
+  return LimitService(FirebaseFirestore.instance, fam.familyId);
+});
+
+final dailyLimitProvider =
+    StreamProvider.autoDispose.family<DailyLimit, String>(
+  (ref, childId) => ref.watch(limitServiceProvider).watch(childId),
+);
+
+final commandServiceProvider = Provider<CommandService>((ref) {
+  final fam = ref.watch(familyServiceProvider);
+  return CommandService(FirebaseFirestore.instance, fam.familyId);
+});
+
+// ───── Bosqich 5 — oshkora rasm ─────
+final photoServiceProvider = Provider<PhotoService>((ref) {
+  final fam = ref.watch(familyServiceProvider);
+  return PhotoService(FirebaseFirestore.instance, fam.familyId);
+});
+
+final photosProvider =
+    StreamProvider.autoDispose.family<List<PhotoModel>, String>(
+  (ref, childId) => ref.watch(photoServiceProvider).watch(childId),
+);
+
+// ───── Bosqich 6 — marshrut tarixi ─────
+final historyServiceProvider = Provider<HistoryService>((ref) {
+  final fam = ref.watch(familyServiceProvider);
+  return HistoryService(FirebaseFirestore.instance, fam.familyId);
+});
+
+/// (childId, kun) bo'yicha joylashuv tarixi. Kun DATE-only bo'lsin.
+final historyProvider = FutureProvider.autoDispose
+    .family<List<LocationPoint>, (String, DateTime)>((ref, arg) {
+  final (childId, day) = arg;
+  return ref.watch(historyServiceProvider).forDay(childId, day);
+});

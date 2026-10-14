@@ -52,6 +52,10 @@ service cloud.firestore {
             && pairing(request.resource.data.pairCode).familyId == fid
             && pairing(request.resource.data.pairCode).childId == cid;
         }
+        // Ost-kolleksiyalar uchun: shu anonymous bola egasimi?
+        function isChildOwner() {
+          return isSignedIn() && childDoc().childAuthUid == request.auth.uid;
+        }
 
         allow read: if isParent(fid) || isThisChild();
         allow create, delete: if isParent(fid);
@@ -60,11 +64,42 @@ service cloud.firestore {
         // ───── Joylashuv tarixi ─────
         match /locations/{doc} {
           allow read: if isParent(fid);
-          allow create: if isSignedIn()
-            && childDoc().childAuthUid == request.auth.uid;
+          allow create: if isChildOwner();
           allow update, delete: if false;
         }
-        // usage / limits / commands / photos — keyingi bosqichlarda ochiladi.
+
+        // ───── Ekran vaqti (usage) — Bosqich 4 ─────
+        // Bola o'z statistikasini yozadi; ota-ona o'qiydi.
+        match /usage/{dateKey} {
+          allow read: if isParent(fid) || isChildOwner();
+          allow create, update: if isChildOwner();
+          allow delete: if isParent(fid);
+        }
+
+        // ───── Limitlar — Bosqich 4 ─────
+        // Ota-ona yozadi; bola mahalliy tatbiq uchun o'qiydi.
+        match /limits/{doc} {
+          allow read: if isParent(fid) || isChildOwner();
+          allow write: if isParent(fid);
+        }
+
+        // ───── Komandalar — Bosqich 4/5 ─────
+        // Ota-ona yaratadi; bola o'qiydi va `status` ni yangilaydi (done).
+        match /commands/{cmd} {
+          allow read: if isParent(fid) || isChildOwner();
+          allow create: if isParent(fid);
+          allow update: if isParent(fid) || isChildOwner();
+          allow delete: if isParent(fid);
+        }
+
+        // ───── Oshkora rasmlar — Bosqich 5 ─────
+        // Bola yuklaydi (Cloudinary URL); ota-ona o'qiydi/o'chiradi.
+        match /photos/{pid} {
+          allow read: if isParent(fid) || isChildOwner();
+          allow create: if isChildOwner();
+          allow update: if false;
+          allow delete: if isParent(fid);
+        }
       }
 
       // ───── Geo-zonalar ─────

@@ -13,6 +13,10 @@ class FsPaths {
   static String geofences(String familyId) => 'families/$familyId/geofences';
   static String alerts(String familyId) => 'families/$familyId/alerts';
 
+  static String usage(String familyId, String childId) =>
+      'families/$familyId/children/$childId/usage';
+  static String limits(String familyId, String childId) =>
+      'families/$familyId/children/$childId/limits';
   static String commands(String familyId, String childId) =>
       'families/$familyId/children/$childId/commands';
   static String photos(String familyId, String childId) =>

@@ -67,6 +67,7 @@ families/{familyId}/children/{childId}
   isCharging: bool
   isOnline: bool
   soundOn: bool
+  locked: bool               # ota-ona qurilmani qulflaganmi (Bosqich 4)
 
 families/{familyId}/children/{childId}/locations/{autoId}   # TARIX
   lat, lng, accuracy, speed: number
@@ -84,13 +85,15 @@ families/{familyId}/alerts/{alertId}
   read: bool
   timestamp: timestamp
 
-families/{familyId}/children/{childId}/usage/{yyyy-mm-dd}
+families/{familyId}/children/{childId}/usage/{yyyy-MM-dd}
   totalScreenTime: int        # sekund
-  apps: [{ package, label, duration }]
+  apps: [{ package, label, duration(sekund) }]
+  updatedAt: timestamp
 
-families/{familyId}/children/{childId}/limits/{packageName}
-  dailyLimit: int             # sekund
-  blocked: bool
+families/{familyId}/children/{childId}/limits/_daily
+  enabled: bool
+  dailyLimitMinutes: int      # kunlik umumiy ekran vaqti limiti (daqiqa)
+  # (kelajakda: limits/{packageName} = { dailyLimit, blocked } — har-ilova bloklash)
 
 families/{familyId}/children/{childId}/commands/{commandId}
   type: "lock" | "unlock" | "ring" | "request_location" | "request_photo"
@@ -98,7 +101,7 @@ families/{familyId}/children/{childId}/commands/{commandId}
   createdAt: timestamp
 
 families/{familyId}/children/{childId}/photos/{photoId}
-  url: string                 # Cloudinary URL
+  url: string                 # Cloudinary URL (imzosiz upload)
   source: "sos" | "checkin"
   createdAt: timestamp
 ```
@@ -158,19 +161,26 @@ Shu sabab childApp **Android-birinchi** rejalashtiriladi; iOS'da faqat joylashuv
 - [ ] Batareya/internet/online holati
 - [ ] SOS tugmasi (bola) → push + alert
 
-**Bosqich 4 — Ekran vaqti + limit**
-- [ ] UsageStats yig'ish → Firestore
-- [ ] Ilovaga limit, dars vaqtida bloklash
+**Bosqich 4 — Ekran vaqti + limit** ✅ (kod yozildi, telefonda sinaladi)
+- [x] UsageStats yig'ish (`app_usage`) → `usage/{yyyy-MM-dd}` (fon servisida)
+- [x] Kunlik ekran vaqti limiti (`limits/_daily`) + ota-ona sozlash ekrani
+- [x] Masofadan qulflash: `lock`/`unlock` komanda → bolada OSHKORA qulf qoplamasi
+      (`flutter_overlay_window`). Limitdan oshsa avtomatik qulf.
+- [x] `request_location` komandasi (zudlik bilan joylashuv)
+- [ ] Har-ilova bloklash (`limits/{packageName}`) — keyingi kengaytma
+- Eslatma: qulf qoplamasi "Display over other apps" ruxsatini talab qiladi; mustahkamroq
+  tatbiq (Device Admin / Accessibility) keyin qo'shilishi mumkin.
 
-**Bosqich 5 — Oshkora foto (SOS/check-in)**
-- [ ] Ota-ona `request_photo` komandasi → bola ekranida **"Ota-onangizga rasm yuborilmoqda"** yozuvi
-- [ ] Bola rasm oladi (yoki SOS bilan avtomatik) → Cloudinary'ga yuklanadi → `photos` kolleksiyasi
-- [ ] parentApp'da rasmlar galereyasi
-- [ ] ⚠️ Maxfiy emas — bola har doim xabardor (Play Store talabi)
+**Bosqich 5 — Oshkora foto (check-in)** ✅ (kod yozildi, telefonda sinaladi)
+- [x] Ota-ona `request_photo` komandasi → bola ekranida **"Ota-onangiz rasm so'radi"**
+- [x] Bola kamerani O'ZI ochadi, rasmni ko'rib yuboradi → Cloudinary (imzosiz) → `photos`
+- [x] parentApp'da rasmlar galereyasi (ko'rish + o'chirish)
+- [x] ⚠️ Maxfiy emas — bola har doim xabardor (maxfiy suratga olish YO'Q)
+- [ ] ⚙️ Sozlash kerak: `childApp/lib/src/core/cloudinary_config.dart` (cloud name + unsigned preset)
 
-**Bosqich 6 — Tarix + sozlash**
-- [ ] Marshrut tarixi xaritada
-- [ ] Profil rasmlari (Cloudinary), sozlamalar
+**Bosqich 6 — Tarix** ✅ (kod yozildi, telefonda sinaladi)
+- [x] Marshrut tarixi xaritada (kun bo'yicha, polyline + boshi/oxiri + masofa)
+- [ ] Profil rasmlari (Cloudinary), umumiy sozlamalar — keyin
 
 ## 8. Asosiy Flutter paketlari
 
@@ -178,10 +188,12 @@ Shu sabab childApp **Android-birinchi** rejalashtiriladi; iOS'da faqat joylashuv
 |--------|-------|
 | Firebase | `firebase_core`, `firebase_auth`, `cloud_firestore`, `firebase_database`, `firebase_messaging` |
 | Joylashuv | `geolocator`, `flutter_background_service` |
-| Xarita | `google_maps_flutter` |
+| Xarita | `flutter_map` + `latlong2` (OpenStreetMap — bepul) |
 | Holat | `battery_plus`, `connectivity_plus` |
-| Media | `cloudinary_public` (yoki to'g'ridan-to'g'ri REST upload) |
-| State mgmt | `riverpod` (yoki `provider`/`bloc`) |
+| Ekran vaqti / qulflash | `app_usage`, `android_intent_plus`, `flutter_overlay_window` (childApp) |
+| Media | `image_picker` + `http` (Cloudinary imzosiz REST upload) |
+| Bildirishnoma | `flutter_local_notifications` (childApp — desugaring yoqilgan) |
+| State mgmt | `flutter_riverpod` |
 
 ## 9. Ochiq savollar / keyin hal qilinadi
 

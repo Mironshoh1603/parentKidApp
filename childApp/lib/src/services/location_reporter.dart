@@ -7,20 +7,26 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/firestore_paths.dart';
 import '../models/geofence_model.dart';
 import '../models/location_point.dart';
+import 'usage_service.dart';
 
 const _channelId = 'location_channel';
 const _notifId = 888;
 const _tick = Duration(seconds: 20); // RTDB jonli yangilash oralig'i
 const _historyEvery = 3; // har 3-tick (~1 daqiqa) Firestore tarixiga yoziladi
+const _usageEvery = 6; // har 6-tick (~2 daqiqa) ekran vaqti o'qiladi/yoziladi
 
-/// Fon joylashuv servisini sozlaydi (foreground service, oshkora bildirishnoma bilan).
-/// Juftlashdan keyin [startReporting] bilan ishga tushiriladi.
+String _todayKey() => DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+/// Fon servisi — joylashuv (Bosqich 1-3) + ekran vaqti/qulflash (Bosqich 4).
+/// Doimiy foreground service, OSHKORA bildirishnoma bilan.
 class LocationReporter {
   static Future<void> configure() async {
     final service = FlutterBackgroundService();
@@ -78,18 +84,26 @@ void onStart(ServiceInstance service) async {
   final rtdb = FirebaseDatabase.instance;
   final fs = FirebaseFirestore.instance;
   final battery = Battery();
+  final usageService = UsageService();
   var counter = 0;
 
   // Geo-zonalar va oldingi holat (kirgan/chiqqan) — xotirada saqlanadi.
   var geofences = <GeofenceModel>[];
   final lastInside = <String, bool>{};
   var lowBatteryAlerted = false;
+  DateTime? lastPointTime;
 
-  fs.collection(FsPaths.geofences(familyId)).snapshots().listen((snap) {
-    geofences = snap.docs
-        .map((d) => GeofenceModel.fromMap(d.id, d.data()))
-        .toList();
-  });
+  // ───── Bosqich 4 — ekran vaqti / qulflash holati ─────
+  var dailyLimitSec = 0; // 0 = cheklovsiz
+  var limitEnabled = false;
+  var manualLock = false; // ota-ona "lock" komandasi
+  String? limitSnoozedDate; // shu kun limit qulfi o'chirilgan
+  var overlayActive = false;
+  var todayUsageSeconds = 0;
+  var photoPending = false;
+  var lockedState = false;
+  bool? lastLockedWritten;
+  var currentDay = _todayKey();
 
   Future<void> addAlert(String type, Map<String, dynamic> data) async {
     await fs.collection(FsPaths.alerts(familyId)).add({
@@ -101,10 +115,29 @@ void onStart(ServiceInstance service) async {
     });
   }
 
-  Timer.periodic(_tick, (timer) async {
-    // Anonim auth yo'qolgan bo'lsa yozmaymiz (yangi uid olmaymiz — childAuthUid buziladi).
-    if (FirebaseAuth.instance.currentUser == null) return;
+  void updateNotification() {
+    if (service is! AndroidServiceInstance) return;
+    String title = 'Nazorat yoqilgan';
+    String content;
+    if (photoPending) {
+      title = 'Ota-onangiz rasm so\'radi';
+      content = 'Ilovani oching va rasm yuboring';
+    } else if (lockedState) {
+      title = 'Qurilma qulflangan';
+      content = 'Ota-onangiz ekran vaqtini cheklab qo\'ydi';
+    } else {
+      final t = lastPointTime;
+      final hhmm = t == null
+          ? '—'
+          : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+      content = 'Oxirgi joylashuv: $hhmm';
+    }
+    service.setForegroundNotificationInfo(title: title, content: content);
+  }
 
+  // Joylashuvni bir marta o'qib yuboradi (jonli + ixtiyoriy tarix).
+  Future<void> reportLocation({required bool writeHistory}) async {
+    if (FirebaseAuth.instance.currentUser == null) return;
     try {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings:
@@ -117,11 +150,11 @@ void onStart(ServiceInstance service) async {
         speed: pos.speed,
         timestamp: DateTime.now(),
       );
+      lastPointTime = point.timestamp;
 
-      // Jonli joylashuv (RTDB) — har tick.
       await rtdb.ref(FsPaths.liveLocation(childId)).set(point.toRtdb());
 
-      // Geo-zona kirish/chiqishni mahalliy aniqlaymiz (Spark — Functions yo'q).
+      // Geo-zona kirish/chiqishni mahalliy aniqlaymiz.
       for (final g in geofences) {
         final inside = g.contains(point.lat, point.lng);
         final prev = lastInside[g.id];
@@ -132,7 +165,6 @@ void onStart(ServiceInstance service) async {
         lastInside[g.id] = inside;
       }
 
-      // Batareya holati + kam batareya ogohlantirishi.
       final level = await battery.batteryLevel;
       if (level <= 15 && !lowBatteryAlerted) {
         lowBatteryAlerted = true;
@@ -141,16 +173,13 @@ void onStart(ServiceInstance service) async {
         lowBatteryAlerted = false;
       }
 
-      // Tarix (Firestore) — kamroq.
-      counter++;
-      if (counter % _historyEvery == 0) {
+      if (writeHistory) {
         await fs
             .collection(FsPaths.locations(familyId, childId))
             .add(point.toFirestore());
-
         final state = await battery.batteryState;
-        final charging = state == BatteryState.charging ||
-            state == BatteryState.full;
+        final charging =
+            state == BatteryState.charging || state == BatteryState.full;
         await fs.doc(FsPaths.child(familyId, childId)).set({
           'lastSeen': FieldValue.serverTimestamp(),
           'batteryLevel': level,
@@ -158,19 +187,129 @@ void onStart(ServiceInstance service) async {
           'isOnline': true,
         }, SetOptions(merge: true));
       }
-
-      // Bildirishnomani yangilab turamiz (oshkoralik).
-      if (service is AndroidServiceInstance) {
-        final t = point.timestamp;
-        final hhmm =
-            '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-        service.setForegroundNotificationInfo(
-          title: 'Nazorat yoqilgan',
-          content: 'Oxirgi joylashuv: $hhmm',
-        );
-      }
     } catch (_) {
       // Tarmoq yoki ruxsat xatosi — keyingi tick'da qayta urinadi.
     }
+  }
+
+  // Qulflash holatini hisoblaydi va qoplama (overlay)ni boshqaradi.
+  Future<void> applyLock() async {
+    final shouldLock = manualLock ||
+        (limitEnabled &&
+            dailyLimitSec > 0 &&
+            todayUsageSeconds >= dailyLimitSec &&
+            limitSnoozedDate != _todayKey());
+    lockedState = shouldLock;
+
+    if (shouldLock && !overlayActive) {
+      try {
+        if (await FlutterOverlayWindow.isPermissionGranted()) {
+          await FlutterOverlayWindow.showOverlay(
+            height: WindowSize.fullCover,
+            width: WindowSize.matchParent,
+            flag: OverlayFlag.defaultFlag,
+            enableDrag: false,
+            overlayTitle: 'Qurilma qulflangan',
+            overlayContent: 'Ota-onangiz ekran vaqtini cheklab qo\'ydi',
+          );
+          overlayActive = true;
+        }
+      } catch (_) {}
+    } else if (!shouldLock && overlayActive) {
+      try {
+        await FlutterOverlayWindow.closeOverlay();
+      } catch (_) {}
+      overlayActive = false;
+    }
+
+    if (lastLockedWritten != shouldLock) {
+      lastLockedWritten = shouldLock;
+      try {
+        await fs
+            .doc(FsPaths.child(familyId, childId))
+            .set({'locked': shouldLock}, SetOptions(merge: true));
+      } catch (_) {}
+    }
+  }
+
+  // ───── Listenerlar ─────
+  fs.collection(FsPaths.geofences(familyId)).snapshots().listen((snap) {
+    geofences =
+        snap.docs.map((d) => GeofenceModel.fromMap(d.id, d.data())).toList();
+  });
+
+  fs
+      .collection(FsPaths.limits(familyId, childId))
+      .doc('_daily')
+      .snapshots()
+      .listen((d) async {
+    final m = d.data();
+    limitEnabled = (m?['enabled'] ?? false) as bool;
+    dailyLimitSec = ((m?['dailyLimitMinutes'] as num?)?.toInt() ?? 0) * 60;
+    await applyLock();
+  });
+
+  fs
+      .collection(FsPaths.commands(familyId, childId))
+      .where('status', isEqualTo: 'pending')
+      .snapshots()
+      .listen((snap) async {
+    photoPending = false;
+    for (final d in snap.docs) {
+      final type = d.data()['type'] as String?;
+      switch (type) {
+        case 'lock':
+          manualLock = true;
+          await d.reference.update({'status': 'done'});
+          break;
+        case 'unlock':
+          manualLock = false;
+          limitSnoozedDate = _todayKey(); // qolgan kun limit qayta qulflamasin
+          await d.reference.update({'status': 'done'});
+          break;
+        case 'request_location':
+          await reportLocation(writeHistory: true);
+          await d.reference.update({'status': 'done'});
+          break;
+        case 'ring':
+          // Minimal: bildirishnoma orqali e'tibor. (To'liq jiringlash keyin.)
+          await d.reference.update({'status': 'done'});
+          break;
+        case 'request_photo':
+          // UI (CheckinScreen) bajaradi — bu yerda faqat belgilaymiz.
+          photoPending = true;
+          break;
+        default:
+          await d.reference.update({'status': 'done'});
+      }
+    }
+    await applyLock();
+    updateNotification();
+  });
+
+  // ───── Davriy sikl ─────
+  Timer.periodic(_tick, (timer) async {
+    if (FirebaseAuth.instance.currentUser == null) return;
+    counter++;
+
+    // Kun almashsa — limit "snooze" ni tiklaymiz.
+    final today = _todayKey();
+    if (today != currentDay) {
+      currentDay = today;
+      limitSnoozedDate = null;
+    }
+
+    // Ekran vaqtini o'qish/yozish (kamroq).
+    if (counter == 1 || counter % _usageEvery == 0) {
+      try {
+        final list = await usageService.todayUsage();
+        todayUsageSeconds = usageService.totalSeconds(list);
+        await usageService.reportToday(fs, familyId, childId);
+      } catch (_) {}
+    }
+
+    await applyLock();
+    await reportLocation(writeHistory: counter % _historyEvery == 0);
+    updateNotification();
   });
 }

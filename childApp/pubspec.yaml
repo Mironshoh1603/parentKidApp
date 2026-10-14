@@ -46,11 +46,14 @@ dependencies:
   battery_plus: ^7.1.2
   connectivity_plus: ^7.3.1
   device_info_plus: ^13.3.0
-  permission_handler: ^13.0.2
   image_picker: ^1.2.3
   http: ^1.6.0
   intl: ^0.20.3
   shared_preferences: ^2.5.5
+  # Bosqich 4 — ekran vaqti / qulflash
+  app_usage: ^4.0.0
+  android_intent_plus: ^5.3.0
+  flutter_overlay_window: ^0.5.0
 
 dev_dependencies:
   flutter_test:
