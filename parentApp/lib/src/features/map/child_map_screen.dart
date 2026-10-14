@@ -24,6 +24,7 @@ class _ChildMapScreenState extends ConsumerState<ChildMapScreen> {
   @override
   Widget build(BuildContext context) {
     final live = ref.watch(liveLocationProvider(widget.child.id));
+    final zones = ref.watch(geofencesProvider).value ?? const [];
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.child.name)),
@@ -64,6 +65,22 @@ class _ChildMapScreenState extends ConsumerState<ChildMapScreen> {
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'uz.bros.parent_app',
+                  ),
+                  CircleLayer(
+                    circles: [
+                      for (final g in zones)
+                        CircleMarker(
+                          point: LatLng(g.lat, g.lng),
+                          radius: g.radius,
+                          useRadiusInMeter: true,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.12),
+                          borderColor: Theme.of(context).colorScheme.primary,
+                          borderStrokeWidth: 1.5,
+                        ),
+                    ],
                   ),
                   MarkerLayer(
                     markers: [

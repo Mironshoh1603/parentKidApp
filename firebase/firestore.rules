@@ -67,7 +67,23 @@ service cloud.firestore {
         // usage / limits / commands / photos — keyingi bosqichlarda ochiladi.
       }
 
-      // geofences / alerts — Stage 2+ da qo'shiladi.
+      // ───── Geo-zonalar ─────
+      // Ota-ona yozadi. Bola mahalliy hisoblash uchun o'qiydi.
+      // (MVP: autentifikatsiyalangan foydalanuvchi o'qiy oladi — familyId tasodifiy ID;
+      //  keyinroq bola a'zoligini qat'iy tekshirish bilan mustahkamlanadi.)
+      match /geofences/{gid} {
+        allow read: if isParent(fid) || isSignedIn();
+        allow write: if isParent(fid);
+      }
+
+      // ───── Ogohlantirishlar ─────
+      // Ota-ona o'qiydi/boshqaradi. Bola FAQAT o'zi uchun yarata oladi.
+      match /alerts/{aid} {
+        allow read, update, delete: if isParent(fid);
+        allow create: if isParent(fid)
+          || (isSignedIn()
+              && get(/databases/$(database)/documents/families/$(fid)/children/$(request.resource.data.childId)).data.childAuthUid == request.auth.uid);
+      }
     }
 
     // ───── Pairing (yuqori darajadagi) ─────

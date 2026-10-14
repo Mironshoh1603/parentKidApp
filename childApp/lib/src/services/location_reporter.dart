@@ -11,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/firestore_paths.dart';
+import '../models/geofence_model.dart';
 import '../models/location_point.dart';
 
 const _channelId = 'location_channel';
@@ -79,6 +80,27 @@ void onStart(ServiceInstance service) async {
   final battery = Battery();
   var counter = 0;
 
+  // Geo-zonalar va oldingi holat (kirgan/chiqqan) — xotirada saqlanadi.
+  var geofences = <GeofenceModel>[];
+  final lastInside = <String, bool>{};
+  var lowBatteryAlerted = false;
+
+  fs.collection(FsPaths.geofences(familyId)).snapshots().listen((snap) {
+    geofences = snap.docs
+        .map((d) => GeofenceModel.fromMap(d.id, d.data()))
+        .toList();
+  });
+
+  Future<void> addAlert(String type, Map<String, dynamic> data) async {
+    await fs.collection(FsPaths.alerts(familyId)).add({
+      'type': type,
+      'childId': childId,
+      'data': data,
+      'read': false,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
   Timer.periodic(_tick, (timer) async {
     // Anonim auth yo'qolgan bo'lsa yozmaymiz (yangi uid olmaymiz — childAuthUid buziladi).
     if (FirebaseAuth.instance.currentUser == null) return;
@@ -99,6 +121,26 @@ void onStart(ServiceInstance service) async {
       // Jonli joylashuv (RTDB) — har tick.
       await rtdb.ref(FsPaths.liveLocation(childId)).set(point.toRtdb());
 
+      // Geo-zona kirish/chiqishni mahalliy aniqlaymiz (Spark — Functions yo'q).
+      for (final g in geofences) {
+        final inside = g.contains(point.lat, point.lng);
+        final prev = lastInside[g.id];
+        if (prev != null && prev != inside) {
+          await addAlert(inside ? 'geofence_enter' : 'geofence_exit',
+              {'geofenceId': g.id, 'geofenceName': g.name});
+        }
+        lastInside[g.id] = inside;
+      }
+
+      // Batareya holati + kam batareya ogohlantirishi.
+      final level = await battery.batteryLevel;
+      if (level <= 15 && !lowBatteryAlerted) {
+        lowBatteryAlerted = true;
+        await addAlert('low_battery', {'level': level});
+      } else if (level > 20) {
+        lowBatteryAlerted = false;
+      }
+
       // Tarix (Firestore) — kamroq.
       counter++;
       if (counter % _historyEvery == 0) {
@@ -106,7 +148,6 @@ void onStart(ServiceInstance service) async {
             .collection(FsPaths.locations(familyId, childId))
             .add(point.toFirestore());
 
-        final level = await battery.batteryLevel;
         await fs.doc(FsPaths.child(familyId, childId)).set({
           'lastSeen': FieldValue.serverTimestamp(),
           'batteryLevel': level,

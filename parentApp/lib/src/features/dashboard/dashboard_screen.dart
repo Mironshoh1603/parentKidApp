@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/child_model.dart';
 import '../../providers.dart';
+import '../alerts/alerts_screen.dart';
+import '../geofence/geofences_screen.dart';
 import '../map/child_map_screen.dart';
 
 /// Ota-ona bosh ekrani — farzandlar ro'yxati.
@@ -66,10 +68,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final children = ref.watch(childrenProvider);
+    final unread = ref.watch(unreadAlertsProvider).value ?? 0;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Farzandlarim'),
         actions: [
+          IconButton(
+            tooltip: 'Geo-zonalar',
+            icon: const Icon(Icons.map_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const GeofencesScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Ogohlantirishlar',
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text('$unread'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AlertsScreen()),
+            ),
+          ),
           IconButton(
             tooltip: 'Chiqish',
             icon: const Icon(Icons.logout),
