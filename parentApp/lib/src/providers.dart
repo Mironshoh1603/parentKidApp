@@ -31,6 +31,11 @@ final familyServiceProvider = Provider<FamilyService>((ref) {
 final childrenProvider = StreamProvider.autoDispose<List<ChildModel>>(
     (ref) => ref.watch(familyServiceProvider).watchChildren());
 
+final childDocProvider =
+    StreamProvider.autoDispose.family<ChildModel?, String>(
+  (ref, childId) => ref.watch(familyServiceProvider).watchChild(childId),
+);
+
 final liveLocationServiceProvider =
     Provider<LiveLocationService>((ref) => LiveLocationService(FirebaseDatabase.instance));
 

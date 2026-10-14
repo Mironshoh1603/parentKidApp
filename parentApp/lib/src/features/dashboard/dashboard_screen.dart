@@ -138,17 +138,44 @@ class _ChildTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final online = child.lastSeen != null &&
+        DateTime.now().difference(child.lastSeen!).inMinutes < 2;
     return Card(
       child: ListTile(
-        leading: CircleAvatar(
-          child: Text(child.name.isNotEmpty ? child.name[0].toUpperCase() : '?'),
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              child: Text(
+                  child.name.isNotEmpty ? child.name[0].toUpperCase() : '?'),
+            ),
+            if (child.paired)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: online ? Colors.green : Colors.grey,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Theme.of(context).colorScheme.surface,
+                        width: 2),
+                  ),
+                ),
+              ),
+          ],
         ),
         title: Text(child.name),
         subtitle: Text(child.paired
-            ? (child.isOnline ? 'Onlayn' : 'Oflayn')
+            ? '${online ? 'Onlayn' : 'Oflayn'} • ${child.batteryLevel}%'
+                '${child.isCharging ? ' ⚡' : ''} • ${_relativeTime(child.lastSeen)}'
             : 'Juftlanmagan — kod kutilmoqda'),
         trailing: child.paired
-            ? Icon(Icons.battery_full,
+            ? Icon(
+                child.isCharging
+                    ? Icons.battery_charging_full
+                    : Icons.battery_full,
                 color: child.batteryLevel < 20 ? Colors.red : null)
             : null,
         onTap: child.paired
@@ -168,6 +195,16 @@ class _ChildTile extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Nisbiy vaqt ("5 daq oldin").
+String _relativeTime(DateTime? dt) {
+  if (dt == null) return '—';
+  final diff = DateTime.now().difference(dt);
+  if (diff.inMinutes < 1) return 'hozir';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} daq oldin';
+  if (diff.inHours < 24) return '${diff.inHours} soat oldin';
+  return '${diff.inDays} kun oldin';
 }
 
 /// Juftlash kodini ko'rsatuvchi dialog (bir nechta joydan chaqiriladi).

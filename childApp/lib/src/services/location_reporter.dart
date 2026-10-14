@@ -148,9 +148,13 @@ void onStart(ServiceInstance service) async {
             .collection(FsPaths.locations(familyId, childId))
             .add(point.toFirestore());
 
+        final state = await battery.batteryState;
+        final charging = state == BatteryState.charging ||
+            state == BatteryState.full;
         await fs.doc(FsPaths.child(familyId, childId)).set({
           'lastSeen': FieldValue.serverTimestamp(),
           'batteryLevel': level,
+          'isCharging': charging,
           'isOnline': true,
         }, SetOptions(merge: true));
       }

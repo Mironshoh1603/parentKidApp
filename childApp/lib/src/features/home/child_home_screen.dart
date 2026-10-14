@@ -1,7 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../services/location_reporter.dart';
+import '../../services/sos_service.dart';
 
 /// Bola bosh ekrani — OSHKORA holat. Bola nima kuzatilayotganini biladi.
 class ChildHomeScreen extends StatefulWidget {
@@ -49,6 +51,33 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
     if (mounted) setState(() => _serviceStarted = true);
   }
 
+  Future<void> _sendSos() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('SOS yuborilsinmi?'),
+        content: const Text(
+            'Ota-onangizga joylashuvingiz bilan shoshilinch signal boradi.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Bekor')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('SOS yuborish'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final ok = await SosService(FirebaseFirestore.instance).sendSos();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? 'SOS yuborildi ✓' : 'SOS yuborilmadi')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final perm = _perm;
@@ -94,6 +123,22 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+            if (ok)
+              SizedBox(
+                height: 110,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _sendSos,
+                  icon: const Icon(Icons.sos, size: 40),
+                  label: const Text('SOS',
+                      style: TextStyle(
+                          fontSize: 28, fontWeight: FontWeight.bold)),
+                ),
+              ),
             const Spacer(),
             if (!ok)
               FilledButton.icon(

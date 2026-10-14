@@ -25,9 +25,31 @@ class _ChildMapScreenState extends ConsumerState<ChildMapScreen> {
   Widget build(BuildContext context) {
     final live = ref.watch(liveLocationProvider(widget.child.id));
     final zones = ref.watch(geofencesProvider).value ?? const [];
+    final doc = ref.watch(childDocProvider(widget.child.id)).value;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.child.name)),
+      appBar: AppBar(
+        title: Text(widget.child.name),
+        actions: [
+          if (doc != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    doc.isCharging
+                        ? Icons.battery_charging_full
+                        : Icons.battery_full,
+                    size: 20,
+                    color: doc.batteryLevel < 20 ? Colors.red : null,
+                  ),
+                  const SizedBox(width: 4),
+                  Center(child: Text('${doc.batteryLevel}%')),
+                ],
+              ),
+            ),
+        ],
+      ),
       body: live.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Xatolik: $e')),

@@ -36,6 +36,11 @@ class FamilyService {
         );
   }
 
+  Stream<ChildModel?> watchChild(String childId) {
+    return _childrenRef.doc(childId).snapshots().map(
+        (d) => d.exists ? ChildModel.fromMap(d.id, d.data()!) : null);
+  }
+
   /// Yangi farzand qo'shadi va juftlash kodi yaratadi. Kodni qaytaradi.
   Future<String> addChild(String name) async {
     final childRef = _childrenRef.doc();
