@@ -1,0 +1,42 @@
+# ─── Monorepo root .gitignore (parentApp + childApp) ───
+# Har bir ilovada o'zining .gitignore ham bor; bu umumiy himoya qatlami.
+
+# Flutter / Dart build artefaktlari
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/generated_plugin_registrant.*
+*.iml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Android
+**/android/.gradle/
+**/android/captures/
+**/android/local.properties
+**/android/key.properties
+**/*.keystore
+**/*.jks
+
+# iOS / macOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/.DS_Store
+
+# ─── Maxfiy sozlamalar (repo public bo'lishi mumkin) ───
+# Firebase client config — security rules bilan himoyalangan, lekin ehtiyot uchun:
+**/google-services.json
+**/GoogleService-Info.plist
+# Cloudinary / boshqa kalitlar:
+**/.env
+**/.env.*
+!**/.env.example
