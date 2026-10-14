@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'core/app_theme.dart';
+import 'features/auth/login_screen.dart';
+import 'features/dashboard/dashboard_screen.dart';
+import 'providers.dart';
 
 /// Ota-ona ilovasining ildiz vidjeti.
 class ParentApp extends StatelessWidget {
@@ -13,40 +18,24 @@ class ParentApp extends StatelessWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.system,
-      home: const _SetupPendingScreen(),
+      home: const _AuthGate(),
     );
   }
 }
 
-/// Firebase ulanmaguncha ko'rsatiladigan vaqtinchalik ekran.
-/// `flutterfire configure` bajarilgach, bu yerda auth oqimi o'rnini oladi.
-class _SetupPendingScreen extends StatelessWidget {
-  const _SetupPendingScreen();
+/// Autentifikatsiya holatiga qarab login yoki dashboard ko'rsatadi.
+class _AuthGate extends ConsumerWidget {
+  const _AuthGate();
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.family_restroom,
-                  size: 72, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(height: 16),
-              Text('MANA — Ota-ona',
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(
-                'Firebase sozlanmoqda.\n`flutterfire configure` bajarilgach,\nbu ekran login bilan almashtiriladi.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authStateProvider);
+    return auth.when(
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(body: Center(child: Text('Xatolik: $e'))),
+      data: (user) =>
+          user == null ? const LoginScreen() : const DashboardScreen(),
     );
   }
 }

@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// Oilaviy xavfsizlik ilovasi — Firestore qoidalari (Spark plan, Functions yo'q).
+// Pairing dizayni: ota-ona `pairings/{code}` yaratadi; bola (anonymous) kodni `get`
+// bilan o'qiydi, `claimedBy` ga o'z uid'ini yozadi, so'ng `children/{cid}` hujjatiga
+// `childAuthUid` ni yozib, pairing'ni o'chiradi. Keyingi yozuvlar `childAuthUid` bilan
+// avtorizatsiya qilinadi.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function family(fid) {
+      return get(/databases/$(database)/documents/families/$(fid)).data;
+    }
+
+    function isParent(fid) {
+      return isSignedIn() && family(fid).parentUid == request.auth.uid;
+    }
+
+    function pairing(code) {
+      return get(/databases/$(database)/documents/pairings/$(code)).data;
+    }
+
+    // ───── Oila ─────
+    match /families/{fid} {
+      allow create: if isSignedIn()
+        && request.resource.data.parentUid == request.auth.uid;
+      allow read, update, delete: if isParent(fid);
+
+      // ───── Bolalar ─────
+      match /children/{cid} {
+        function childDoc() {
+          return get(/databases/$(database)/documents/families/$(fid)/children/$(cid)).data;
+        }
+        // Mavjud hujjat shu anonymous bolага tegishlimi?
+        function isThisChild() {
+          return isSignedIn()
+            && resource.data.keys().hasAny(['childAuthUid'])
+            && resource.data.childAuthUid == request.auth.uid;
+        }
+        // Pairing orqali birinchi marta egalik qilish.
+        // Bola yozuvga `pairCode` va `childAuthUid` ni qo'shadi; qoida pairing'ni tekshiradi.
+        function validClaim() {
+          return isSignedIn()
+            && request.resource.data.childAuthUid == request.auth.uid
+            && exists(/databases/$(database)/documents/pairings/$(request.resource.data.pairCode))
+            && pairing(request.resource.data.pairCode).claimedBy == request.auth.uid
+            && pairing(request.resource.data.pairCode).familyId == fid
+            && pairing(request.resource.data.pairCode).childId == cid;
+        }
+
+        allow read: if isParent(fid) || isThisChild();
+        allow create, delete: if isParent(fid);
+        allow update: if isParent(fid) || isThisChild() || validClaim();
+
+        // ───── Joylashuv tarixi ─────
+        match /locations/{doc} {
+          allow read: if isParent(fid);
+          allow create: if isSignedIn()
+            && childDoc().childAuthUid == request.auth.uid;
+          allow update, delete: if false;
+        }
+        // usage / limits / commands / photos — keyingi bosqichlarda ochiladi.
+      }
+
+      // geofences / alerts — Stage 2+ da qo'shiladi.
+    }
+
+    // ───── Pairing (yuqori darajadagi) ─────
+    match /pairings/{code} {
+      // Ota-ona o'z oilasi uchun yaratadi.
+      allow create: if isSignedIn()
+        && request.resource.data.parentUid == request.auth.uid
+        && request.resource.data.claimedBy == null;
+      // Kodni bilган har qanday autentifikatsiyalangan foydalanuvchi GET qila oladi (list emas).
+      allow get: if isSignedIn();
+      allow list: if false;
+      // Bola egalik qiladi: bo'sh `claimedBy` ni o'z uid'iga o'zgartiradi, muddati o'tmagan bo'lsa.
+      allow update: if isSignedIn()
+        && resource.data.claimedBy == null
+        && request.resource.data.claimedBy == request.auth.uid
+        && request.resource.data.familyId == resource.data.familyId
+        && request.resource.data.childId == resource.data.childId
+        && request.time < resource.data.expiresAt;
+      // O'chirish: egalik qilgan bola yoki ota-ona.
+      allow delete: if isSignedIn()
+        && (resource.data.claimedBy == request.auth.uid
+            || resource.data.parentUid == request.auth.uid);
+    }
+  }
+}

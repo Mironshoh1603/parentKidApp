@@ -1,0 +1,11 @@
+{
+  "//": "Realtime Database — jonli joylashuv /live/{childId}. MVP: autentifikatsiya talab qilinadi. Keyin childAuthUid bilan qattiqroq cheklanadi.",
+  "rules": {
+    "live": {
+      "$childId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
